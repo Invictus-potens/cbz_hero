@@ -148,7 +148,7 @@ class WebResource:
         sourcedata = re.split("(\\r\\n|\\r|\\n)", sourcedata)
 
         if matching:
-            return self.filter(souredata, matching)
+            return [line for line in sourcedata if re.match(matching, line)]
         else:
             return sourcedata
 
