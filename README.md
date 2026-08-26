@@ -17,12 +17,10 @@ CBZ Downloader is a lightly extensible comic downloader, that can assemble comic
 
 This is the list of sites cbzdl knows how to download from. The author's main interest is manga hence the heavy manga-oriented support, but any comic hosting site should be supportable.
 
-* Mangakakalot (including manganelo.com)
 * MangaFox (fanfox.net)
 * MangaHere (mangahere.cc)
-* Manga-Here.io (similar name to above, but different site)
 * MangaReader.net
-* MangaPanda.com
+* MangaLivre (mangalivre.blog)
 
 ## Installing
 
