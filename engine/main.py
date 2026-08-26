@@ -124,7 +124,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
             dlstate.set("last", chapter_num) # Inequivocable success !
         except Exception as e:
             feedback.warn( str(e) )
-            errors += 1
+            failed_urls.append(chapter_url)
 
     return failed_urls
 
