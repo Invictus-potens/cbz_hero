@@ -111,6 +111,9 @@ def downloadChapter(cengine, chapter_url, comic_dir):
         except web.DownloadError as e:
             feedback.warn("%i : %s"%(e.code,str(e)) )
             failed_urls.append(url)
+        except Exception as e:
+            feedback.warn("Unexpected error on %s: %s"%(url,str(e)) )
+            failed_urls.append(url)
 
         time.sleep(step_delay)
 
