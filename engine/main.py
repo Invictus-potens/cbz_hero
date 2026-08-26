@@ -163,7 +163,7 @@ def downloadComic(cengine, comic_url, script_args):
 
 def parseArguments():
 
-    parser = argparse.ArgumentParser(sys.argv, description="Download a comic")
+    parser = argparse.ArgumentParser(description="Download a comic")
     parser.add_argument("url", type=str, help="The URL of the comic to download")
     parser.add_argument("-s", "--start", action="store", default=-1, type=float, help="Minimum chapter to start from")
     parser.add_argument("-e", "--end", action="store", default=9000, type=float, help="Maximum chapter to include (up to 9000)")
