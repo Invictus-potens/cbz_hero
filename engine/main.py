@@ -205,8 +205,6 @@ def initializeState():
     except state.ComicStateError as e:
         dlstate.set("last", -1)
 
-    # TODO manage failed chapters in state file instead of initializing on each run
-    dlstate.set("failed_chapters", None)
 
 def main():
     global step_delay
@@ -256,6 +254,8 @@ def main():
             feedback.error("# %s"%chapter )
 
         dlstate.set("failed_chapters", failed)
+    else:
+        dlstate.set("failed_chapters", None)
 
 if __name__ == "__main__":
     try:
