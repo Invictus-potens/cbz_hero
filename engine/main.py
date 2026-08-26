@@ -47,13 +47,17 @@ def downloadPage(cengine, page_url, chapter_dir):
 
     Takes care of zero-padding page numbers
     """
-    feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     page        = cengine.Page(page_url)
+    page_num    = page.getPageNumber().zfill(4)
 
+    if os.path.isdir(chapter_dir) and filesys.listDir(chapter_dir, r"page_%s\..+" % page_num):
+        feedback.debug("    Skip existing page_%s" % page_num)
+        return
+
+    feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     image_url   = page.getImageUrl()
     resource    = web.WebResource(image_url, headers=page.getImageHeaders() )
-    # TODO pre-detect existing pages, don't re-download
-    image_file  = os.path.sep.join( [chapter_dir, 'page_' + page.getPageNumber().zfill(4) + '.' + resource.getExtension()] )
+    image_file  = os.path.sep.join( [chapter_dir, 'page_' + page_num + '.' + resource.getExtension()] )
 
     resource.saveTo(image_file)
 
