@@ -47,13 +47,17 @@ def downloadPage(cengine, page_url, chapter_dir):
 
     Takes care of zero-padding page numbers
     """
-    feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     page        = cengine.Page(page_url)
+    page_num    = page.getPageNumber().zfill(4)
 
+    if os.path.isdir(chapter_dir) and filesys.listDir(chapter_dir, r"page_%s\..+" % page_num):
+        feedback.debug("    Skip existing page_%s" % page_num)
+        return
+
+    feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     image_url   = page.getImageUrl()
     resource    = web.WebResource(image_url, headers=page.getImageHeaders() )
-    # TODO pre-detect existing pages, don't re-download
-    image_file  = os.path.sep.join( [chapter_dir, 'page_' + page.getPageNumber().zfill(4) + '.' + resource.getExtension()] )
+    image_file  = os.path.sep.join( [chapter_dir, 'page_' + page_num + '.' + resource.getExtension()] )
 
     resource.saveTo(image_file)
 
@@ -107,6 +111,9 @@ def downloadChapter(cengine, chapter_url, comic_dir):
         except web.DownloadError as e:
             feedback.warn("%i : %s"%(e.code,str(e)) )
             failed_urls.append(url)
+        except Exception as e:
+            feedback.warn("Unexpected error on %s: %s"%(url,str(e)) )
+            failed_urls.append(url)
 
         time.sleep(step_delay)
 
@@ -117,7 +124,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
             dlstate.set("last", chapter_num) # Inequivocable success !
         except Exception as e:
             feedback.warn( str(e) )
-            errors += 1
+            failed_urls.append(chapter_url)
 
     return failed_urls
 
@@ -156,7 +163,7 @@ def downloadComic(cengine, comic_url, script_args):
 
 def parseArguments():
 
-    parser = argparse.ArgumentParser(sys.argv, description="Download a comic")
+    parser = argparse.ArgumentParser(description="Download a comic")
     parser.add_argument("url", type=str, help="The URL of the comic to download")
     parser.add_argument("-s", "--start", action="store", default=-1, type=float, help="Minimum chapter to start from")
     parser.add_argument("-e", "--end", action="store", default=9000, type=float, help="Maximum chapter to include (up to 9000)")
@@ -198,8 +205,6 @@ def initializeState():
     except state.ComicStateError as e:
         dlstate.set("last", -1)
 
-    # TODO manage failed chapters in state file instead of initializing on each run
-    dlstate.set("failed_chapters", None)
 
 def main():
     global step_delay
@@ -249,6 +254,8 @@ def main():
             feedback.error("# %s"%chapter )
 
         dlstate.set("failed_chapters", failed)
+    else:
+        dlstate.set("failed_chapters", None)
 
 if __name__ == "__main__":
     try:
