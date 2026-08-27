@@ -19,7 +19,6 @@ This is the list of sites cbzdl knows how to download from. The author's main in
 
 * MangaFox (fanfox.net)
 * MangaHere (mangahere.cc)
-* MangaReader.net
 * MangaLivre (mangalivre.blog)
 
 ## Installing
@@ -76,11 +75,11 @@ Two run modes:
 
 Simply provide a base URL to download from (front page for the comic) - e.g.
 
-	cbzdl http://mangakakalot.com/manga/acaria
+	cbzdl https://mangalivre.blog/manga/the-beginning-after-the-end/
 
 To you can specify a start chapter, and end chapter (both optional, as ints or floats)
 
-	cbzdl https://www.mangapanda.com/appearance-of-the-yellow-dragon -s 1 -e 2
+	cbzdl https://mangalivre.blog/manga/the-beginning-after-the-end/ -s 1 -e 2
 
 `URL` can be literally a URL, or the folder containing the chapters previously downloaded.
 
