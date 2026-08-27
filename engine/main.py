@@ -2,7 +2,7 @@
 
 import filesys
 import ComicEngine
-import urllib.error
+import requests
 import argparse
 import sys
 import re
@@ -12,6 +12,7 @@ import feedback
 import web
 import cbz
 import state
+import concurrent.futures
 
 """
 
@@ -31,6 +32,7 @@ Re-attempt the download of the missing pages of a chapter.
 
 cbzdl_version = "1.2.1"
 step_delay = 1
+step_workers = 5
 ch_start = -1
 ch_end = 9000
 
@@ -61,11 +63,38 @@ def downloadPage(cengine, page_url, chapter_dir):
 
     resource.saveTo(image_file)
 
+def downloadPageWorker(cengine, page_url, chapter_dir):
+    """ Runs downloadPage on a thread pool worker
+
+    Catches errors instead of raising, so one failed page doesn't
+    kill the whole pool. Returns page_url on failure, None on success.
+    """
+    try:
+        downloadPage(cengine, page_url, chapter_dir)
+    except ComicEngine.ComicError as e:
+        feedback.warn("Oops : %s"%str(e) )
+        return page_url
+    except requests.exceptions.RequestException as e:
+        feedback.warn("Could not download %s"%page_url)
+        return page_url
+    except web.DownloadError as e:
+        feedback.warn("%i : %s"%(e.code,str(e)) )
+        return page_url
+    except Exception as e:
+        feedback.warn("Unexpected error on %s: %s"%(page_url,str(e)) )
+        return page_url
+    finally:
+        time.sleep(step_delay)
+    return None
+
 def downloadChapter(cengine, chapter_url, comic_dir):
     """ Kicks off the page downloads for a chapter
 
     Checks whether chapter number is within specified bounds
-    
+
+    Pages are fetched concurrently (step_workers threads); each worker still
+    respects step_delay before picking up its next page.
+
     On completion, if there were no page download errors, attempts CBZ creation
 
     Returns number of errors encountered
@@ -73,6 +102,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     feedback.debug("Start on %s ..."%chapter_url)
 
     global step_delay
+    global step_workers
     global ch_start
     global ch_end
 
@@ -99,23 +129,14 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     feedback.info("    %i pages"%len(page_urls))
 
     failed_urls = []
-    for url in page_urls:
-        try:
-            downloadPage(cengine, url, chapter_dir)
-        except ComicEngine.ComicError as e:
-            feedback.warn("Oops : %s"%str(e) )
-            failed_urls.append(url)
-        except urllib.error.URLError as e:
-            feedback.warn("Could not download %s"%url)
-            failed_urls.append(url)
-        except web.DownloadError as e:
-            feedback.warn("%i : %s"%(e.code,str(e)) )
-            failed_urls.append(url)
-        except Exception as e:
-            feedback.warn("Unexpected error on %s: %s"%(url,str(e)) )
-            failed_urls.append(url)
-
-        time.sleep(step_delay)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=step_workers) as executor:
+        results = executor.map(
+            lambda url: downloadPageWorker(cengine, url, chapter_dir),
+            page_urls
+            )
+        for result in results:
+            if result is not None:
+                failed_urls.append(result)
 
     if len(failed_urls) == 0:
         feedback.debug("  Compiling to CBZ ...")
@@ -168,6 +189,7 @@ def parseArguments():
     parser.add_argument("-s", "--start", action="store", default=-1, type=float, help="Minimum chapter to start from")
     parser.add_argument("-e", "--end", action="store", default=9000, type=float, help="Maximum chapter to include (up to 9000)")
     parser.add_argument("-d", "--delay", action='store', type=int, default=-1, help="Delay to introduce during download (seconds)")
+    parser.add_argument("-w", "--workers", action='store', type=int, default=-1, help="Number of pages to download concurrently (default: 5)")
     parser.add_argument("-v", "--verbose", action='store_true', help="Verbose mode")
     parser.add_argument("-f", "--failed", action='store_true', help="Check for failed items")
     parser.add_argument("-l", "--last", action='store_true', help="Display last successfully downloded chapter")
@@ -208,6 +230,7 @@ def initializeState():
 
 def main():
     global step_delay
+    global step_workers
     global ch_start
     global ch_end
     global dlstate
@@ -241,7 +264,11 @@ def main():
         else:
             step_delay = 1
 
+        if args.workers >= 1:
+            step_workers = args.workers
+
         feedback.debug("Delay chosen: %i" % step_delay)
+        feedback.debug("Workers chosen: %i" % step_workers)
 
         failed = downloadComic(cengine, comic_url, args)
 
