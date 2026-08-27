@@ -3,8 +3,7 @@
 """ Web-related utilities and classes.
 """
 
-import urllib.request
-import urllib.error
+import requests
 from lxml.html import parse as parseHTML
 from urllib.parse import urljoin
 import filesys
@@ -12,11 +11,17 @@ import io
 import re
 import os
 import time
-import gzip
 import ComicEngine
 import feedback
 
 useragent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'
+
+# Shared across threads: reuses TCP/TLS connections per host instead of
+# renegotiating on every page fetch (requests.Session is safe for concurrent use).
+_session = requests.Session()
+_adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+_session.mount('http://', _adapter)
+_session.mount('https://', _adapter)
 
 class WebResource:
     """ A WebResource is identified by its URL
@@ -48,8 +53,11 @@ class WebResource:
         fh.close()
 
     def decompress(self):
-        if self.getHeader("Content-Encoding") == "gzip":
-            self.pagedata = gzip.decompress(self.pagedata)
+        """ No-op: requests decodes Content-Encoding transparently already.
+
+        Kept for module API compatibility (see writing_modules.md).
+        """
+        pass
 
     def load(self):
         """ Loads the page data if not yet already done.
@@ -67,44 +75,39 @@ class WebResource:
                     headers = {'User-Agent': useragent}
                     headers.update(self.extra_headers)
 
-                    req = urllib.request.Request(
-                        self.url,
-                        data=None,
-                        headers=headers
-                    )
-                    self.response = urllib.request.urlopen(req)
-                    self.pagedata = self.response.read()
-                    self.response.close()
+                    self.response = _session.get(self.url, headers=headers, timeout=30)
+                    self.response.raise_for_status()
+                    self.pagedata = self.response.content
 
                     if self.pagedata != None:
-                        self.decompress()
                         feedback.debug("Succesfully downloaded %s"%self.url)
                         return
                     else:
                         raise ComicEngine.ComicError("No data obtained!")
-                except ConnectionResetError as e:
+                except requests.exceptions.ConnectionError as e:
                     if retries > 0:
                         print("Peer reset connection - retrying ...")
                         retries -= 1
                         time.sleep(2)
                         continue
-                    
+
                     raise DownloadError("Could not load %s\n%s"%(self.url, str(e)), self.url )
 
-                except urllib.error.HTTPError as e:
-                    if httpCodeClass(e.code) == 500 and retries > 0:
-                        feedback.warn("# HTTP %i error - retrying %i times ..."%(e.code, retries))
+                except requests.exceptions.HTTPError as e:
+                    code = self.response.status_code
+                    if httpCodeClass(code) == 500 and retries > 0:
+                        feedback.warn("# HTTP %i error - retrying %i times ..."%(code, retries))
                         retries -= 1
                         time.sleep(2)
                         continue
-                    if httpCodeClass(e.code) == 400:
-                        raise DownloadError("Request error: %i" % e.code, self.url, e.code)
-                    
-                    raise DownloadError("Could not load %s\n%s"%(self.url, str(e)), self.url, e.code )
+                    if httpCodeClass(code) == 400:
+                        raise DownloadError("Request error: %i" % code, self.url, code)
+
+                    raise DownloadError("Could not load %s\n%s"%(self.url, str(e)), self.url, code )
 
     def getHeader(self, header):
         self.load()
-        return self.response.getheader(header)
+        return self.response.headers.get(header)
 
     def getData(self):
         """ Loads remote data, and returns the data as raw bytes

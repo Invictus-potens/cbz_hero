@@ -2,7 +2,7 @@
 
 import filesys
 import ComicEngine
-import urllib.error
+import requests
 import argparse
 import sys
 import re
@@ -74,7 +74,7 @@ def downloadPageWorker(cengine, page_url, chapter_dir):
     except ComicEngine.ComicError as e:
         feedback.warn("Oops : %s"%str(e) )
         return page_url
-    except urllib.error.URLError as e:
+    except requests.exceptions.RequestException as e:
         feedback.warn("Could not download %s"%page_url)
         return page_url
     except web.DownloadError as e:
