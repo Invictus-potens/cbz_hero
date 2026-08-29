@@ -13,6 +13,7 @@ import web
 import cbz
 import state
 import concurrent.futures
+import json
 from tqdm import tqdm
 
 """
@@ -28,6 +29,11 @@ If a directory is specified, will try to download from the last registered chapt
 Re-attempt the download of the missing pages of a chapter.
 
     cbzdl CHAPDIR [-d DELAY]
+
+Scan a module's listing pages for titles (and chapter, where the site shows
+it on the listing), diffing against the last saved catalog_MODULE.json.
+
+    cbzdl catalog:MODULE [--max-pages N] [--full]
 
 """
 
@@ -217,6 +223,51 @@ def downloadComic(cengine, comic_url, script_args):
 
     return failed_chapters
 
+def catalogFilePath(module_name):
+    return os.path.sep.join([output_dir, "catalog_%s.json" % module_name])
+
+def loadCatalog(path):
+    if os.path.isfile(path):
+        with open(path, 'r', encoding='utf-8') as fh:
+            return json.load(fh)
+    return {}
+
+def saveCatalog(path, entries):
+    filesys.ensureDirectoryFor(path)
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(entries, fh, ensure_ascii=False, indent=2)
+
+def runCatalog(module_name, script_args):
+    """ Scans a module's listing pages, diffs against the last saved catalog,
+    and prints only what's new or updated (unless script_args.full).
+
+    Persists the full catalog to catalog_<module>.json in output_dir either way.
+    """
+    cengine = ComicEngine.determineFromName(module_name)
+    path = catalogFilePath(module_name)
+    previous = loadCatalog(path)
+
+    feedback.info("Scanning catalog: %s" % module_name)
+    entries = ComicEngine.scanCatalog(cengine, max_pages=script_args.max_pages)
+
+    novos = []
+    atualizados = []
+    for url, item in entries.items():
+        prev = previous.get(url)
+        if prev is None:
+            novos.append(item)
+        elif prev.get('ultimo_capitulo') != item.get('ultimo_capitulo'):
+            atualizados.append(item)
+
+    saveCatalog(path, entries)
+
+    # ensure_ascii=True here: stdout on Windows terminals can be a non-UTF-8
+    # codepage (e.g. cp1252), which chokes on titles with non-ASCII chars.
+    if script_args.full:
+        print(json.dumps(list(entries.values() ), ensure_ascii=True, indent=2) )
+    else:
+        print(json.dumps({"novos": novos, "atualizados": atualizados}, ensure_ascii=True, indent=2) )
+
 def parseArguments():
 
     parser = argparse.ArgumentParser(description="Download a comic")
@@ -226,6 +277,8 @@ def parseArguments():
     parser.add_argument("-d", "--delay", action='store', type=int, default=-1, help="Delay to introduce during download (seconds)")
     parser.add_argument("-w", "--workers", action='store', type=int, default=-1, help="Number of pages to download concurrently (default: 5)")
     parser.add_argument("-o", "--output-dir", action='store', type=str, default=".", help="Directory to create the comic folder in (default: current directory)")
+    parser.add_argument("--max-pages", action='store', type=int, default=None, help="[catalog:MODULE] Stop after this many listing pages")
+    parser.add_argument("--full", action='store_true', help="[catalog:MODULE] Print the whole catalog instead of just new/updated titles")
     parser.add_argument("-v", "--verbose", action='store_true', help="Verbose mode")
     parser.add_argument("-f", "--failed", action='store_true', help="Check for failed items")
     parser.add_argument("-l", "--last", action='store_true', help="Display last successfully downloded chapter")
@@ -278,6 +331,10 @@ def main():
     args = parseArguments()
     feedback.debug_mode = args.verbose
     output_dir = args.output_dir
+
+    if args.url.startswith("catalog:"):
+        runCatalog(args.url[len("catalog:"):], args)
+        return
 
     checkSpecialCases(args.url)
 
