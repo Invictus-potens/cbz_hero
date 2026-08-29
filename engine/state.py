@@ -19,7 +19,7 @@ def getOldSourceUrl(source_dir):
 
 class DownloaderState:
 
-    def __init__(self, stated_source):
+    def __init__(self, stated_source, output_dir="."):
         state_file_name = "state.data"
         feedback.debug("Source: %s" % stated_source)
 
@@ -38,7 +38,7 @@ class DownloaderState:
             self.cengine = ComicEngine.determineFrom(stated_source)
             feedback.debug("Comic engine: %s" % self.cengine.__name__)
 
-            comic_dir = self.cengine.Comic(stated_source).getComicLowerName()
+            comic_dir = os.path.sep.join([output_dir, self.cengine.Comic(stated_source).getComicLowerName()])
             feedback.debug('Comic dir: %s' % comic_dir)
 
             self.__state_file = os.path.sep.join([comic_dir, state_file_name])

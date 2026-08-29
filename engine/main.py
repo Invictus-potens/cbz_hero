@@ -36,6 +36,7 @@ step_delay = 1
 step_workers = 5
 ch_start = -1
 ch_end = 9000
+output_dir = "."
 page_retries = 2
 
 def abbreviateUrl(url, max=60):
@@ -180,11 +181,19 @@ def downloadComic(cengine, comic_url, script_args):
 
     Displays any failed chapters after execution
     """
+    global output_dir
+
     feedback.info("Downloading %s"%comic_url)
 
     comic        = cengine.Comic(comic_url)
     chapter_urls = comic.getChapterUrls()
-    comic_dir    = comic.getComicLowerName()
+
+    # Resuming from an existing comic dir: keep downloading into that same
+    # dir instead of recomputing one from output_dir (which may differ).
+    if os.path.isdir(script_args.url):
+        comic_dir = script_args.url
+    else:
+        comic_dir = os.path.sep.join([output_dir, comic.getComicLowerName()])
 
     feedback.info("  %i chapters (total)" % len(chapter_urls))
 
@@ -216,6 +225,7 @@ def parseArguments():
     parser.add_argument("-e", "--end", action="store", default=9000, type=float, help="Maximum chapter to include (up to 9000)")
     parser.add_argument("-d", "--delay", action='store', type=int, default=-1, help="Delay to introduce during download (seconds)")
     parser.add_argument("-w", "--workers", action='store', type=int, default=-1, help="Number of pages to download concurrently (default: 5)")
+    parser.add_argument("-o", "--output-dir", action='store', type=str, default=".", help="Directory to create the comic folder in (default: current directory)")
     parser.add_argument("-v", "--verbose", action='store_true', help="Verbose mode")
     parser.add_argument("-f", "--failed", action='store_true', help="Check for failed items")
     parser.add_argument("-l", "--last", action='store_true', help="Display last successfully downloded chapter")
@@ -259,6 +269,7 @@ def main():
     global step_workers
     global ch_start
     global ch_end
+    global output_dir
     global dlstate
     global cbzdl_version
 
@@ -266,10 +277,11 @@ def main():
 
     args = parseArguments()
     feedback.debug_mode = args.verbose
+    output_dir = args.output_dir
 
     checkSpecialCases(args.url)
 
-    dlstate = state.DownloaderState(args.url)
+    dlstate = state.DownloaderState(args.url, output_dir=output_dir)
     checkState(args)
 
     ch_start = args.start
