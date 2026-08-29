@@ -13,6 +13,7 @@ import web
 import cbz
 import state
 import concurrent.futures
+from tqdm import tqdm
 
 """
 
@@ -87,6 +88,25 @@ def downloadPageWorker(cengine, page_url, chapter_dir):
         time.sleep(step_delay)
     return None
 
+def downloadPagesConcurrently(cengine, page_urls, chapter_dir):
+    """ Downloads a batch of pages using the thread pool, with a progress bar.
+
+    Returns the list of page URLs that failed.
+    """
+    global step_workers
+
+    failed_urls = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=step_workers) as executor:
+        results = tqdm(
+            executor.map(lambda url: downloadPageWorker(cengine, url, chapter_dir), page_urls),
+            total=len(page_urls), desc="    Pages", unit="pg", leave=False
+            )
+        for result in results:
+            if result is not None:
+                failed_urls.append(result)
+
+    return failed_urls
+
 def downloadChapter(cengine, chapter_url, comic_dir):
     """ Kicks off the page downloads for a chapter
 
@@ -128,15 +148,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
 
     feedback.info("    %i pages"%len(page_urls))
 
-    failed_urls = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=step_workers) as executor:
-        results = executor.map(
-            lambda url: downloadPageWorker(cengine, url, chapter_dir),
-            page_urls
-            )
-        for result in results:
-            if result is not None:
-                failed_urls.append(result)
+    failed_urls = downloadPagesConcurrently(cengine, page_urls, chapter_dir)
 
     if len(failed_urls) == 0:
         feedback.debug("  Compiling to CBZ ...")
