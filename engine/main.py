@@ -13,6 +13,7 @@ import web
 import cbz
 import state
 import concurrent.futures
+from tqdm import tqdm
 
 """
 
@@ -35,6 +36,8 @@ step_delay = 1
 step_workers = 5
 ch_start = -1
 ch_end = 9000
+output_dir = "."
+page_retries = 2
 
 def abbreviateUrl(url, max=60):
     """ Reduce long URLs for screen display
@@ -52,9 +55,14 @@ def downloadPage(cengine, page_url, chapter_dir):
     page        = cengine.Page(page_url)
     page_num    = page.getPageNumber().zfill(4)
 
-    if os.path.isdir(chapter_dir) and filesys.listDir(chapter_dir, r"page_%s\..+" % page_num):
-        feedback.debug("    Skip existing page_%s" % page_num)
-        return
+    if os.path.isdir(chapter_dir):
+        existing = filesys.listDir(chapter_dir, r"page_%s\..+" % page_num)
+        if existing:
+            existing_path = os.path.sep.join([chapter_dir, existing[0]])
+            if os.path.getsize(existing_path) > 0:
+                feedback.debug("    Skip existing page_%s" % page_num)
+                return
+            feedback.debug("    page_%s is empty, re-fetching" % page_num)
 
     feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     image_url   = page.getImageUrl()
@@ -87,13 +95,33 @@ def downloadPageWorker(cengine, page_url, chapter_dir):
         time.sleep(step_delay)
     return None
 
+def downloadPagesConcurrently(cengine, page_urls, chapter_dir):
+    """ Downloads a batch of pages using the thread pool, with a progress bar.
+
+    Returns the list of page URLs that failed.
+    """
+    global step_workers
+
+    failed_urls = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=step_workers) as executor:
+        results = tqdm(
+            executor.map(lambda url: downloadPageWorker(cengine, url, chapter_dir), page_urls),
+            total=len(page_urls), desc="    Pages", unit="pg", leave=False
+            )
+        for result in results:
+            if result is not None:
+                failed_urls.append(result)
+
+    return failed_urls
+
 def downloadChapter(cengine, chapter_url, comic_dir):
     """ Kicks off the page downloads for a chapter
 
     Checks whether chapter number is within specified bounds
 
     Pages are fetched concurrently (step_workers threads); each worker still
-    respects step_delay before picking up its next page.
+    respects step_delay before picking up its next page. Failed pages are
+    retried up to page_retries extra times before being reported as failed.
 
     On completion, if there were no page download errors, attempts CBZ creation
 
@@ -105,6 +133,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     global step_workers
     global ch_start
     global ch_end
+    global page_retries
 
     chapter     = cengine.Chapter(chapter_url)
     chapter_num = float(chapter.getChapterNumber() )
@@ -128,15 +157,13 @@ def downloadChapter(cengine, chapter_url, comic_dir):
 
     feedback.info("    %i pages"%len(page_urls))
 
-    failed_urls = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=step_workers) as executor:
-        results = executor.map(
-            lambda url: downloadPageWorker(cengine, url, chapter_dir),
-            page_urls
-            )
-        for result in results:
-            if result is not None:
-                failed_urls.append(result)
+    failed_urls = downloadPagesConcurrently(cengine, page_urls, chapter_dir)
+
+    retries_left = page_retries
+    while len(failed_urls) > 0 and retries_left > 0:
+        feedback.warn("    Retry %i failed page(s) (%i attempt(s) left)" % (len(failed_urls), retries_left))
+        failed_urls = downloadPagesConcurrently(cengine, failed_urls, chapter_dir)
+        retries_left -= 1
 
     if len(failed_urls) == 0:
         feedback.debug("  Compiling to CBZ ...")
@@ -154,11 +181,19 @@ def downloadComic(cengine, comic_url, script_args):
 
     Displays any failed chapters after execution
     """
+    global output_dir
+
     feedback.info("Downloading %s"%comic_url)
 
     comic        = cengine.Comic(comic_url)
     chapter_urls = comic.getChapterUrls()
-    comic_dir    = comic.getComicLowerName()
+
+    # Resuming from an existing comic dir: keep downloading into that same
+    # dir instead of recomputing one from output_dir (which may differ).
+    if os.path.isdir(script_args.url):
+        comic_dir = script_args.url
+    else:
+        comic_dir = os.path.sep.join([output_dir, comic.getComicLowerName()])
 
     feedback.info("  %i chapters (total)" % len(chapter_urls))
 
@@ -190,6 +225,7 @@ def parseArguments():
     parser.add_argument("-e", "--end", action="store", default=9000, type=float, help="Maximum chapter to include (up to 9000)")
     parser.add_argument("-d", "--delay", action='store', type=int, default=-1, help="Delay to introduce during download (seconds)")
     parser.add_argument("-w", "--workers", action='store', type=int, default=-1, help="Number of pages to download concurrently (default: 5)")
+    parser.add_argument("-o", "--output-dir", action='store', type=str, default=".", help="Directory to create the comic folder in (default: current directory)")
     parser.add_argument("-v", "--verbose", action='store_true', help="Verbose mode")
     parser.add_argument("-f", "--failed", action='store_true', help="Check for failed items")
     parser.add_argument("-l", "--last", action='store_true', help="Display last successfully downloded chapter")
@@ -233,6 +269,7 @@ def main():
     global step_workers
     global ch_start
     global ch_end
+    global output_dir
     global dlstate
     global cbzdl_version
 
@@ -240,10 +277,11 @@ def main():
 
     args = parseArguments()
     feedback.debug_mode = args.verbose
+    output_dir = args.output_dir
 
     checkSpecialCases(args.url)
 
-    dlstate = state.DownloaderState(args.url)
+    dlstate = state.DownloaderState(args.url, output_dir=output_dir)
     checkState(args)
 
     ch_start = args.start
