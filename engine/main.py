@@ -36,6 +36,7 @@ step_delay = 1
 step_workers = 5
 ch_start = -1
 ch_end = 9000
+page_retries = 2
 
 def abbreviateUrl(url, max=60):
     """ Reduce long URLs for screen display
@@ -113,7 +114,8 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     Checks whether chapter number is within specified bounds
 
     Pages are fetched concurrently (step_workers threads); each worker still
-    respects step_delay before picking up its next page.
+    respects step_delay before picking up its next page. Failed pages are
+    retried up to page_retries extra times before being reported as failed.
 
     On completion, if there were no page download errors, attempts CBZ creation
 
@@ -125,6 +127,7 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     global step_workers
     global ch_start
     global ch_end
+    global page_retries
 
     chapter     = cengine.Chapter(chapter_url)
     chapter_num = float(chapter.getChapterNumber() )
@@ -149,6 +152,12 @@ def downloadChapter(cengine, chapter_url, comic_dir):
     feedback.info("    %i pages"%len(page_urls))
 
     failed_urls = downloadPagesConcurrently(cengine, page_urls, chapter_dir)
+
+    retries_left = page_retries
+    while len(failed_urls) > 0 and retries_left > 0:
+        feedback.warn("    Retry %i failed page(s) (%i attempt(s) left)" % (len(failed_urls), retries_left))
+        failed_urls = downloadPagesConcurrently(cengine, failed_urls, chapter_dir)
+        retries_left -= 1
 
     if len(failed_urls) == 0:
         feedback.debug("  Compiling to CBZ ...")
