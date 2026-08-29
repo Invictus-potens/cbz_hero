@@ -84,6 +84,34 @@ class Comic(ComicSite):
 
         return urls
 
+def listCatalogPage(page):
+    """ Returns [{titulo, url, ultimo_capitulo}] for one listing page.
+
+    Chapter info ships right on the card, no need to open the comic's own page.
+    Returns [] once past the last page (site answers 200 with no cards).
+    """
+    url = "%s/manga/" % site_url if page == 1 else "%s/manga/page/%i/" % (site_url, page)
+    doc = ComicSite(url).getDomObject()
+
+    entries = []
+    for card in doc.cssselect("article.home-manga-card"):
+        title_links = card.cssselect("h3 a")
+        if len(title_links) == 0:
+            continue
+
+        ultimo_capitulo = None
+        chapter_spans = card.cssselect(".home-card-chapters a span")
+        if len(chapter_spans) > 0:
+            ultimo_capitulo = util.regexGroup(".*?Cap\\.\\s*([0-9.]+)", chapter_spans[0].text_content().strip() )
+
+        entries.append({
+            'titulo': title_links[0].text_content().strip(),
+            'url': title_links[0].attrib.get('href', ""),
+            'ultimo_capitulo': ultimo_capitulo
+            })
+
+    return entries
+
 class Chapter(ComicSite):
 
     def __init__(self, url):
