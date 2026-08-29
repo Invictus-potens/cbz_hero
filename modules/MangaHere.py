@@ -38,6 +38,29 @@ class ComicSite(web.WebResource):
         # the image CDN answers 403 to referer-less requests
         return {'Referer': "%s/" % site_url}
 
+def listCatalogPage(page):
+    """ Returns [{titulo, url, ultimo_capitulo}] for one directory listing page.
+
+    The directory doesn't carry chapter info, only title and link.
+    Returns [] once past the last page (site answers 200 with no titles).
+    """
+    doc = ComicSite("%s/directory/%i.htm" % (site_url, page) ).getDomObject()
+
+    seen = set()
+    entries = []
+    for elem_a in doc.cssselect('a[title]'):
+        href = elem_a.attrib.get('href', "")
+        if not re.match("^/manga/[a-zA-Z0-9_]+/$", href) or href in seen:
+            continue
+        seen.add(href)
+        entries.append({
+            'titulo': elem_a.attrib.get('title', ""),
+            'url': "%s%s" % (site_url, href),
+            'ultimo_capitulo': None
+            })
+
+    return entries
+
 class Comic(ComicSite):
 
     def __init__(self, url):

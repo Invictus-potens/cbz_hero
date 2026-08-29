@@ -33,6 +33,16 @@ class ComicSite(web.WebResource):
             url = url.replace(target_domain, valid_domains[0])
         return url
 
+# Optional: powers `cbzdl catalog:example_module`. Skip it if the site has no
+# browsable listing/directory page.
+def listCatalogPage(page):
+    """ Returns [{titulo, url, ultimo_capitulo}] for listing page number `page`.
+
+    Return [] once past the last page - that's the signal the scan stops on.
+    ultimo_capitulo can be None if the listing doesn't show it.
+    """
+    pass
+
 class Comic(ComicSite):
     
     def __init__(self, url):
