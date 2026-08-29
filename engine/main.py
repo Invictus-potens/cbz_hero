@@ -54,9 +54,14 @@ def downloadPage(cengine, page_url, chapter_dir):
     page        = cengine.Page(page_url)
     page_num    = page.getPageNumber().zfill(4)
 
-    if os.path.isdir(chapter_dir) and filesys.listDir(chapter_dir, r"page_%s\..+" % page_num):
-        feedback.debug("    Skip existing page_%s" % page_num)
-        return
+    if os.path.isdir(chapter_dir):
+        existing = filesys.listDir(chapter_dir, r"page_%s\..+" % page_num)
+        if existing:
+            existing_path = os.path.sep.join([chapter_dir, existing[0]])
+            if os.path.getsize(existing_path) > 0:
+                feedback.debug("    Skip existing page_%s" % page_num)
+                return
+            feedback.debug("    page_%s is empty, re-fetching" % page_num)
 
     feedback.info("    Fetch %s"%abbreviateUrl(page_url) )
     image_url   = page.getImageUrl()
