@@ -62,34 +62,54 @@ You should now be able to use `cbzdl` from the cygwin command line, whilst in an
 
 ## Using
 
-Two run modes:
+### Commands
 
-	# Download a comic
-	cbzdl URL [-s START] [-e END] [-d DELAY]
+	cbzdl URL                      Download a comic (all chapters)
+	cbzdl COMICDIR                 Resume a comic download from the last successful chapter
+	cbzdl URL -f                   Show which chapters failed on the last run, then exit
+	cbzdl URL -l                   Show the last successfully downloaded chapter, then exit
+	cbzdl URL -c                   Count chapters available on the site, then exit (no download)
+	cbzdl modules                  List installed site modules, then exit
+	cbzdl catalog:MODULE           Scan a site's listing pages for titles (+ chapter, where the site shows it), no download
 
-	# Check for prior failures and exit
-	cbzdl URL -f
+`URL` can be literally a URL, or the folder of a comic previously downloaded (to resume it). `MODULE` is a module name as printed by `cbzdl modules` (e.g. `MangaLivre`).
 
-	# list installed modules
-	cbzdl modules
+### Flags
 
-Simply provide a base URL to download from (front page for the comic) - e.g.
+Flag | Applies to | Meaning
+---|---|---
+`-s, --start START` | download | Minimum chapter to start from (int or float)
+`-e, --end END` | download | Maximum chapter to include (int or float, up to 9000)
+`-d, --delay DELAY` | download, catalog | Seconds to wait between requests (default: module's recommended delay, usually 1-2s)
+`-w, --workers WORKERS` | download | Pages to download concurrently per chapter (default: 5)
+`-o, --output-dir DIR` | download, catalog | Where to create the comic folder / save `catalog_MODULE.json` (default: current directory)
+`-v, --verbose` | all | Verbose/debug output
+`--max-pages N` | catalog | Stop scanning after N listing pages
+`--full` | catalog | Print the entire catalog instead of just new/updated titles
+
+### Examples
+
+Download a comic:
 
 	cbzdl https://mangalivre.blog/manga/the-beginning-after-the-end/
 
-To you can specify a start chapter, and end chapter (both optional, as ints or floats)
+Download only chapters 1 to 2:
 
 	cbzdl https://mangalivre.blog/manga/the-beginning-after-the-end/ -s 1 -e 2
 
-`URL` can be literally a URL, or the folder containing the chapters previously downloaded.
+Download into a specific folder:
 
-If you have already downloaded the comic from the specified `URL`, and you do not specify a start chapter, cbzdl starts again from the last chapter successully downloaded.
+	cbzdl https://mangalivre.blog/manga/the-beginning-after-the-end/ -o ~/Comics
 
-By default, `cbzdl` will wait a few seconds between fetching two images (some sites throttle heavy downloaders), depending on the module's recommended delay. You can set the delay manually by providing a `-d DELAY` argument, where `DELAY` is an integer, of how long to pause between page downloads.
+If you have already downloaded the comic and don't specify a start chapter, `cbzdl` resumes from the last chapter successfully downloaded - resume also skips pages already on disk within an interrupted chapter, and retries a page that fails a couple of times before giving up.
 
-You can list available modules by running
+Scan a site's catalog for new/updated titles (saves to `catalog_MODULE.json`, only prints what changed since the last scan):
 
-	cbzdl modules
+	cbzdl catalog:MangaLivre
+
+Scan just the first 2 listing pages, and print the whole catalog (not just the diff):
+
+	cbzdl catalog:MangaFox --max-pages 2 --full
 
 ## Extending
 
